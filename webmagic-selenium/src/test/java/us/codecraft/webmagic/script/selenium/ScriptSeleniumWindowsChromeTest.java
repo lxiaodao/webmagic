@@ -1,4 +1,4 @@
-package us.codecraft.webmagic.downloader;
+package us.codecraft.webmagic.script.selenium;
 
 import java.io.IOException;
 import java.util.Arrays;

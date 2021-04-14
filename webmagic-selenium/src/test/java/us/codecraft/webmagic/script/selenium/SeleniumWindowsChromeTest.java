@@ -1,4 +1,4 @@
-package us.codecraft.webmagic.downloader;
+package us.codecraft.webmagic.script.selenium;
 
 import org.junit.Ignore;
 import org.junit.Test;

@@ -25,10 +25,6 @@ import us.codecraft.webmagic.downloader.HttpClientDownloader;
 import us.codecraft.webmagic.pipeline.FilePipeline;
 import us.codecraft.webmagic.selector.Html;
 
-/**
- * @author 410775541@qq.com <br>
- * @since 0.5.1
- */
 
 public class PigyyManggaPageProcessor implements PageProcessor {
 	
@@ -39,9 +35,6 @@ public class PigyyManggaPageProcessor implements PageProcessor {
             .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .addHeader("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,zh-TW;q=0.7,ja;q=0.6,ko;q=0.5")
             .setCharset("UTF-8");
-
-    private static final int voteNum = 1000;
-
     
 
     @Override
@@ -75,7 +68,7 @@ public class PigyyManggaPageProcessor implements PageProcessor {
 
     public static void main(String[] args) {
     	Spider mainspider=Spider.create(new PigyyManggaPageProcessor()).
-                addUrl("http://www.piggymanga.com/manga/fitness/fitness/chapter-9").
+                addUrl("http://www.piggymanga.com/manga/fitness/fitness/chapter-10").
                 //addPipeline(new FilePipeline("D:\\webmagic\\")).
                 thread(5);
     	

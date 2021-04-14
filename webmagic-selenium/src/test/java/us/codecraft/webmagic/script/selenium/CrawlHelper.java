@@ -1,7 +1,7 @@
 /**
  * 
  */
-package us.codecraft.webmagic.downloader;
+package us.codecraft.webmagic.script.selenium;
 
 import java.io.BufferedReader;
 import java.io.File;
