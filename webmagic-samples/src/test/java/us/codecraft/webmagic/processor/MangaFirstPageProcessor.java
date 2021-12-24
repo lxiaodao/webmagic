@@ -26,9 +26,9 @@ import us.codecraft.webmagic.pipeline.FilePipeline;
 import us.codecraft.webmagic.selector.Html;
 
 
-public class PigyyManggaPageProcessor implements PageProcessor {
+public class MangaFirstPageProcessor implements PageProcessor {
 	
-	 protected Logger log = LoggerFactory.getLogger(PigyyManggaPageProcessor.class);
+	 protected Logger log = LoggerFactory.getLogger(MangaFirstPageProcessor.class);
 
     private Site site = Site.me().setCycleRetryTimes(5).setRetryTimes(5).setSleepTime(500).setTimeOut(3 * 60 * 1000)
     		.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36")
@@ -38,7 +38,7 @@ public class PigyyManggaPageProcessor implements PageProcessor {
     
    String contentUrl;
    String theStorePath;
-    public PigyyManggaPageProcessor(String contentUrl2, String theStorePath2) {
+    public MangaFirstPageProcessor(String contentUrl2, String theStorePath2) {
 		this.contentUrl=contentUrl2;
 		this.theStorePath=theStorePath2;
 	}
@@ -51,17 +51,17 @@ public class PigyyManggaPageProcessor implements PageProcessor {
         
         //System.out.println("this is html of the-----"+page.getHtml());
     	String chapter=page.getHtml().xpath("//div[@class='reading-content']//input[@id='wp-manga-current-chap']/@value").toString();
-    	List<String> divs= page.getHtml().xpath("//div[@class='page-break no-gaps']").all();
+    	List<String> divs= page.getHtml().xpath("//div[@class='page-break']").all();
     	for(String content:divs) {
     		String id=new Html(content).xpath("//img/@id").toString();
-    		String src=new Html(content).xpath("//img/@src").toString();
+    		String src=new Html(content).xpath("//img/@data-src").toString();
     		//System.out.println("---id and src---"+id+"         "+src);
     		
     		String filepath=makeFileStorePath(src.trim(),chapter);
     		downloadAndStore(id,src.trim(),filepath);
     	}
     	
-    	System.out.println("---Load the site sucess-----");
+    	System.out.println("---Load the page sucess-----"+chapter);
         
     }
 
@@ -75,19 +75,44 @@ public class PigyyManggaPageProcessor implements PageProcessor {
    
 	
     public static void main(String[] args) {
-    	String theStorePath="D:/webmagic/fitness/";
-    	String contentUrl="http://www.piggymanga.com/manga/fitness/fitness/chapter-61";
+    	String theStorePath="D:/download/secret-class/";
+    	String contentUrl="https://manga1st.online/manga/secret-class_2/chapter-81";
+    	
+    	int loop_number=0;
+    	int loop_begin=0;
     	if(args!=null&&args.length>0) {
     		contentUrl=args[0];
     		theStorePath=args[1];
     		
     	}
-    	Spider mainspider=Spider.create(new PigyyManggaPageProcessor(contentUrl,theStorePath)).
+    	
+		String part1="";
+    	if(args!=null&&args.length>2) {
+    		loop_begin=Integer.valueOf(args[2]);
+    		loop_number=Integer.valueOf(args[3]);
+    		int indexof=contentUrl.lastIndexOf("/");
+    		part1=contentUrl.substring(0, indexof+1);
+    	}
+    	//at least loop 1
+    	
+    	for(int i=0;i<loop_number+1;i++) {
+    		
+    		
+       
+    	Spider mainspider=Spider.create(new MangaFirstPageProcessor(contentUrl,theStorePath)).
                 addUrl(contentUrl).
                 //addPipeline(new FilePipeline("D:\\webmagic\\")).
                 thread(5);
+    	       mainspider.run();
+    	       
+    	       if(loop_number!=0) {
+       			loop_begin=loop_begin+1;
+       			contentUrl=part1+"chapter-"+loop_begin;
+       		}
+    	}
+    	System.out.println("---complete---");
     	
-    	mainspider.run();
+    	
     }
     
     private String makeFileStorePath(String url, String chapter) {
