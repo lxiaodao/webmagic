@@ -26,9 +26,9 @@ import us.codecraft.webmagic.pipeline.FilePipeline;
 import us.codecraft.webmagic.selector.Html;
 
 
-public class MangaFirstPageProcessor implements PageProcessor {
+public class ManhwaxPageProcessor implements PageProcessor {
 	
-	 protected Logger log = LoggerFactory.getLogger(MangaFirstPageProcessor.class);
+	 protected Logger log = LoggerFactory.getLogger(ManhwaxPageProcessor.class);
 
     private Site site = Site.me().setCycleRetryTimes(5).setRetryTimes(5).setSleepTime(500).setTimeOut(3 * 60 * 1000)
     		.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36")
@@ -38,9 +38,11 @@ public class MangaFirstPageProcessor implements PageProcessor {
     
    String contentUrl;
    String theStorePath;
-    public MangaFirstPageProcessor(String contentUrl2, String theStorePath2) {
+   int current_chapter=1;
+    public ManhwaxPageProcessor(int chapter, String contentUrl2, String theStorePath2) {
 		this.contentUrl=contentUrl2;
 		this.theStorePath=theStorePath2;
+		this.current_chapter=chapter;
 	}
 
 
@@ -50,18 +52,18 @@ public class MangaFirstPageProcessor implements PageProcessor {
     	
         
         //System.out.println("this is html of the-----"+page.getHtml());
-    	String chapter=page.getHtml().xpath("//div[@class='reading-content']//input[@id='wp-manga-current-chap']/@value").toString();
-    	List<String> divs= page.getHtml().xpath("//div[@class='page-break']").all();
-    	for(String content:divs) {
-    		String id=new Html(content).xpath("//img/@id").toString();
-    		String src=new Html(content).xpath("//img/@data-src").toString();
+    	
+    	List<String> imges= page.getHtml().xpath("//div[@id='readerarea']").xpath("//img").all();
+    	for(String content:imges) {
+    		String index=new Html(content).xpath("@data-index").toString();
+    		String src=new Html(content).xpath("@src").toString();
     		//System.out.println("---id and src---"+id+"         "+src);
     		
-    		String filepath=makeFileStorePath(src.trim(),chapter);
-    		downloadAndStore(id,src.trim(),filepath);
+    		String filepath=makeFileStorePath(index,this.current_chapter+"");
+    		downloadAndStore(index,src.trim(),filepath);
     	}
     	
-    	System.out.println("---Load the page sucess-----"+chapter);
+    	System.out.println("---Load the page sucess-----"+this.current_chapter);
         
     }
 
@@ -75,23 +77,22 @@ public class MangaFirstPageProcessor implements PageProcessor {
    
 	
     public static void main(String[] args) {
-    	String theStorePath="D:/download/secret-class/";
-    	String contentUrl="https://manga1st.online/manga/secret-class_2/chapter-81";
+    	String theStorePath="D:/webmagic/boarding-diary/";
+    	String contentUrl="https://manhwax.com/boarding-diary-chapter-39-english";
     	
     	int loop_number=0;
-    	int loop_begin=0;
+    	int loop_begin=0;// start number
     	if(args!=null&&args.length>0) {
     		contentUrl=args[0];
     		theStorePath=args[1];
     		
     	}
     	
-		String part1="";
+		String part1="https://manhwax.com/boarding-diary-chapter-";
     	if(args!=null&&args.length>2) {
     		loop_begin=Integer.valueOf(args[2]);
     		loop_number=Integer.valueOf(args[3]);
-    		int indexof=contentUrl.lastIndexOf("/");
-    		part1=contentUrl.substring(0, indexof+1);
+    		
     	}
     	//at least loop 1
     	
@@ -99,7 +100,7 @@ public class MangaFirstPageProcessor implements PageProcessor {
     		
     		
        
-    	Spider mainspider=Spider.create(new MangaFirstPageProcessor(contentUrl,theStorePath)).
+    	Spider mainspider=Spider.create(new ManhwaxPageProcessor(loop_begin,contentUrl,theStorePath)).
                 addUrl(contentUrl).
                 //addPipeline(new FilePipeline("D:\\webmagic\\")).
                 thread(5);
@@ -107,7 +108,7 @@ public class MangaFirstPageProcessor implements PageProcessor {
     	       
     	       if(loop_number!=0) {
        			loop_begin=loop_begin+1;
-       			contentUrl=part1+"chapter-"+loop_begin;
+       			contentUrl=part1+loop_begin+"-english";
        		}
     	}
     	System.out.println("---complete---");
@@ -115,25 +116,13 @@ public class MangaFirstPageProcessor implements PageProcessor {
     	
     }
     
-    private String makeFileStorePath(String url, String chapter) {
+    private String makeFileStorePath(String index, String chapter) {
     	
-    	 int indexof=url.lastIndexOf("/");
+    	
     	 
     	 String fullstorpath=new String(theStorePath);
-     	
-    	 if(indexof!=-1) {
-    		 //theStorePath+=chapter+"/";
-    		 String index_chapter=chapter;
-			
-			  if(chapter.indexOf("-")!=-1) {
-			  index_chapter=chapter.substring(chapter.indexOf("-")+1,chapter.length());
-			  }
-			 
-			  fullstorpath+=index_chapter+"-"+url.substring(indexof+1, url.length());
-    	 }else {
-    		 log.error("Can not fine / char in url {}",url);
-    	 }
-    	 
+    	 fullstorpath+=fullstorpath+chapter+"-"+index;
+  
 		return fullstorpath;
 	}
     

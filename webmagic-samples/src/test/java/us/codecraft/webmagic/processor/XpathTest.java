@@ -31,5 +31,9 @@ public class XpathTest {
 			assertTrue(id.equals("image-0"));
 	    }
 	
+	public void test_get_index() {
+		
+	}
+	
 
 }
