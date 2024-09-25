@@ -1,7 +1,9 @@
 package us.codecraft.webmagic.selector;
 
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import us.codecraft.webmagic.utils.BaseSelectorUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,11 +13,17 @@ import java.util.List;
  * @since 0.3.0
  */
 public abstract class BaseElementSelector implements Selector, ElementSelector {
+    private Document parse(String text) {
+        // Jsoup could not parse <tr></tr> or <td></td> tag directly
+        // https://stackoverflow.com/questions/63607740/jsoup-couldnt-parse-tr-tag
+        text = BaseSelectorUtils.preParse(text);
+        return Jsoup.parse(text);
+    }
 
     @Override
     public String select(String text) {
         if (text != null) {
-            return select(Jsoup.parse(text));
+            return select(parse(text));
         }
         return null;
     }
@@ -23,7 +31,7 @@ public abstract class BaseElementSelector implements Selector, ElementSelector {
     @Override
     public List<String> selectList(String text) {
         if (text != null) {
-            return selectList(Jsoup.parse(text));
+            return selectList(parse(text));
         } else {
             return new ArrayList<String>();
         }
@@ -31,14 +39,14 @@ public abstract class BaseElementSelector implements Selector, ElementSelector {
 
     public Element selectElement(String text) {
         if (text != null) {
-            return selectElement(Jsoup.parse(text));
+            return selectElement(parse(text));
         }
         return null;
     }
 
     public List<Element> selectElements(String text) {
         if (text != null) {
-            return selectElements(Jsoup.parse(text));
+            return selectElements(parse(text));
         } else {
             return new ArrayList<Element>();
         }

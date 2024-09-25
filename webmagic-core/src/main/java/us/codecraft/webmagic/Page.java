@@ -20,7 +20,7 @@ import java.util.Map;
  * {@link #getHtml()}  get content of current page                 <br>
  * {@link #putField(String, Object)}  save extracted result            <br>
  * {@link #getResultItems()} get extract results to be used in {@link us.codecraft.webmagic.pipeline.Pipeline}<br>
- * {@link #addTargetRequests(java.util.List)} {@link #addTargetRequest(String)} add urls to fetch                 <br>
+ * {@link #addTargetRequests(Iterable)} {@link #addTargetRequest(String)} add urls to fetch                 <br>
  *
  * @author code4crafter@gmail.com <br>
  * @see us.codecraft.webmagic.downloader.Downloader
@@ -49,15 +49,35 @@ public class Page {
 
     private byte[] bytes;
 
-    private List<Request> targetRequests = new ArrayList<Request>();
+    private List<Request> targetRequests = new ArrayList<>();
 
     private String charset;
-    
+
     public Page() {
     }
 
-    public static Page fail(){
+    /**
+     * Returns a {@link Page} with {@link #downloadSuccess} is {@code false}.
+     *
+     * @return the page.
+     * @deprecated Use {@link #fail(Request)} instead.
+     */
+    @Deprecated
+    public static Page fail() {
+        return fail(null);
+    }
+
+    /**
+     * Returns a {@link Page} with {@link #downloadSuccess} is {@code false},
+     * and {@link #request} is specified.
+     *
+     * @param request the {@link Request}.
+     * @return the page.
+     * @since 0.10.0
+     */
+    public static Page fail(Request request){
         Page page = new Page();
+        page.setRequest(request);
         page.setDownloadSuccess(false);
         return page;
     }
@@ -108,7 +128,8 @@ public class Page {
      * @deprecated since 0.4.0
      * The html is parse just when first time of calling {@link #getHtml()}, so use {@link #setRawText(String)} instead.
      */
-    public void setHtml(Html html) {
+    @Deprecated
+	public void setHtml(Html html) {
         this.html = html;
     }
 
@@ -121,14 +142,8 @@ public class Page {
      *
      * @param requests requests
      */
-    public void addTargetRequests(List<String> requests) {
-        for (String s : requests) {
-            if (StringUtils.isBlank(s) || s.equals("#") || s.startsWith("javascript:")) {
-                continue;
-            }
-            s = UrlUtils.canonicalizeUrl(s, url.toString());
-            targetRequests.add(new Request(s));
-        }
+    public void addTargetRequests(Iterable<String> requests) {
+    	addTargetRequests(requests, 0); // Default priority is 0
     }
 
     /**
@@ -137,14 +152,33 @@ public class Page {
      * @param requests requests
      * @param priority priority
      */
-    public void addTargetRequests(List<String> requests, long priority) {
-        for (String s : requests) {
-            if (StringUtils.isBlank(s) || s.equals("#") || s.startsWith("javascript:")) {
-                continue;
-            }
-            s = UrlUtils.canonicalizeUrl(s, url.toString());
-            targetRequests.add(new Request(s).setPriority(priority));
+    public void addTargetRequests(Iterable<String> requests, long priority) {
+    	if(requests == null) {
+    		return;
+    	}
+    	
+        for (String req : requests) {
+        	addRequestIfValid(req, priority);
         }
+    }
+    
+    /**
+     * Helper method to add a request if it's valid.
+     *
+     * @param url      URL to add
+     * @param priority Priority for the URL
+     */
+    private void addRequestIfValid(String url, long priority) {
+        if (StringUtils.isBlank(url) || url.equals("#") || url.startsWith("javascript:")) {
+            return;
+        }
+
+        String canonicalizedUrl = UrlUtils.canonicalizeUrl(url, this.url.toString());
+        Request req = new Request(canonicalizedUrl);
+        if(priority > 0) {
+            req.setPriority(priority);
+        }
+        targetRequests.add(req);
     }
 
     /**

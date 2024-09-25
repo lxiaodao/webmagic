@@ -1,6 +1,17 @@
 package us.codecraft.webmagic;
 
-import org.apache.commons.collections.CollectionUtils;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,16 +27,6 @@ import us.codecraft.webmagic.scheduler.Scheduler;
 import us.codecraft.webmagic.thread.CountableThreadPool;
 import us.codecraft.webmagic.utils.UrlUtils;
 import us.codecraft.webmagic.utils.WMCollections;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Entrance of a crawler.<br>
@@ -71,9 +72,9 @@ public class Spider implements Runnable, Task {
     protected Site site;
 
     protected String uuid;
-
-    protected Scheduler scheduler = new QueueScheduler();
-
+    
+    protected SpiderScheduler scheduler;
+    
     protected Logger logger = LoggerFactory.getLogger(getClass());
 
     protected CountableThreadPool threadPool;
@@ -84,7 +85,7 @@ public class Spider implements Runnable, Task {
 
     protected AtomicInteger stat = new AtomicInteger(STAT_INIT);
 
-    protected boolean exitWhenComplete = true;
+    protected volatile boolean exitWhenComplete = true;
 
     protected final static int STAT_INIT = 0;
 
@@ -96,17 +97,13 @@ public class Spider implements Runnable, Task {
 
     protected boolean destroyWhenExit = true;
 
-    private ReentrantLock newUrlLock = new ReentrantLock();
-
-    private Condition newUrlCondition = newUrlLock.newCondition();
-
     private List<SpiderListener> spiderListeners;
 
     private final AtomicLong pageCount = new AtomicLong(0);
 
     private Date startTime;
 
-    private int emptySleepTime = 30000;
+    private long emptySleepTime = 30000;
 
     /**
      * create a spider with pageProcessor.
@@ -127,6 +124,7 @@ public class Spider implements Runnable, Task {
     public Spider(PageProcessor pageProcessor) {
         this.pageProcessor = pageProcessor;
         this.site = pageProcessor.getSite();
+        this.scheduler = new SpiderScheduler(new QueueScheduler());
     }
 
     /**
@@ -182,15 +180,15 @@ public class Spider implements Runnable, Task {
     /**
      * set scheduler for Spider
      *
-     * @param scheduler scheduler
+     * @param updateScheduler scheduler
      * @return this
      * @see Scheduler
      * @since 0.2.1
      */
-    public Spider setScheduler(Scheduler scheduler) {
+    public Spider setScheduler(Scheduler updateScheduler) {
         checkIfRunning();
-        Scheduler oldScheduler = this.scheduler;
-        this.scheduler = scheduler;
+        Scheduler oldScheduler = scheduler.getScheduler();
+        scheduler.setScheduler(updateScheduler);
         if (oldScheduler != null) {
             Request request;
             while ((request = oldScheduler.poll(this)) != null) {
@@ -209,7 +207,7 @@ public class Spider implements Runnable, Task {
      * @deprecated
      */
     @Deprecated
-	public Spider pipeline(Pipeline pipeline) {
+    public Spider pipeline(Pipeline pipeline) {
         return addPipeline(pipeline);
     }
 
@@ -260,7 +258,7 @@ public class Spider implements Runnable, Task {
      * @deprecated
      */
     @Deprecated
-	public Spider downloader(Downloader downloader) {
+    public Spider downloader(Downloader downloader) {
         return setDownloader(downloader);
     }
 
@@ -305,32 +303,54 @@ public class Spider implements Runnable, Task {
     public void run() {
         checkRunningStat();
         initComponent();
-        logger.info("Spider {} started!",getUUID());
+        logger.info("Spider {} started!", getUUID());
+        // interrupt won't be necessarily detected
         while (!Thread.currentThread().isInterrupted() && stat.get() == STAT_RUNNING) {
-            final Request request = scheduler.poll(this);
-            if (request == null) {
-                if (threadPool.getThreadAlive() == 0 && exitWhenComplete) {
-                    break;
-                }
-                // wait until new url added
-                waitNewUrl();
-            } else {
-                threadPool.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            processRequest(request);
-                            onSuccess(request);
-                        } catch (Exception e) {
-                            onError(request, e);
-                            logger.error("process request " + request + " error", e);
-                        } finally {
-                            pageCount.incrementAndGet();
-                            signalNewUrl();
+            Request poll = scheduler.poll(this);
+            if (poll == null) {
+                if (threadPool.getThreadAlive() == 0) {
+                    //no alive thread anymore , try again
+                    poll = scheduler.poll(this);
+                    if (poll == null) {
+                        if (exitWhenComplete) {
+                            break;
+                        } else {
+                            // wait
+                            try {
+                                Thread.sleep(emptySleepTime);
+                                continue;
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
                         }
                     }
-                });
+                } else {
+                    // wait until new url added，
+                    if (scheduler.waitNewUrl(threadPool, emptySleepTime)) {
+                        // if interrupted
+                        break;
+                    }
+                    continue;
+                }
             }
+            final Request request = poll;
+            //this may swallow the interruption
+            threadPool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        processRequest(request);
+                        onSuccess(request);
+                    } catch (Exception e) {
+                        onError(request, e);
+                        logger.error("process request " + request + " error", e);
+                    } finally {
+                        pageCount.incrementAndGet();
+                        scheduler.signalNewUrl();
+                    }
+                }
+            });
         }
         stat.set(STAT_STOPPED);
         // release some resources
@@ -438,7 +458,6 @@ public class Spider implements Runnable, Task {
             logger.info("page status code error, page {} , code: {}", request.getUrl(), page.getStatusCode());
         }
         sleep(site.getSleepTime());
-        return;
     }
 
     private void onDownloaderFail(Request request) {
@@ -469,6 +488,7 @@ public class Spider implements Runnable, Task {
             Thread.sleep(time);
         } catch (InterruptedException e) {
             logger.error("Thread interrupted when sleep",e);
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -509,7 +529,7 @@ public class Spider implements Runnable, Task {
         for (String url : urls) {
             addRequest(new Request(url));
         }
-        signalNewUrl();
+        scheduler.signalNewUrl();
         return this;
     }
 
@@ -561,32 +581,8 @@ public class Spider implements Runnable, Task {
         for (Request request : requests) {
             addRequest(request);
         }
-        signalNewUrl();
+        scheduler.signalNewUrl();
         return this;
-    }
-
-    private void waitNewUrl() {
-        newUrlLock.lock();
-        try {
-            //double check
-            if (threadPool.getThreadAlive() == 0 && exitWhenComplete) {
-                return;
-            }
-            newUrlCondition.await(emptySleepTime, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            logger.warn("waitNewUrl - interrupted, error {}", e);
-        } finally {
-            newUrlLock.unlock();
-        }
-    }
-
-    private void signalNewUrl() {
-        try {
-            newUrlLock.lock();
-            newUrlCondition.signalAll();
-        } finally {
-            newUrlLock.unlock();
-        }
     }
 
     public void start() {
@@ -599,6 +595,13 @@ public class Spider implements Runnable, Task {
         } else {
             logger.info("Spider " + getUUID() + " stop fail!");
         }
+    }
+
+    /**
+     * Stop when all tasks in the queue are completed and all worker threads are also completed
+     */
+    public void stopWhenComplete(){
+        this.exitWhenComplete = true;
     }
 
     /**
@@ -764,15 +767,20 @@ public class Spider implements Runnable, Task {
     }
 
     public Scheduler getScheduler() {
-        return scheduler;
+        return scheduler.getScheduler();
     }
 
     /**
      * Set wait time when no url is polled.<br><br>
      *
      * @param emptySleepTime In MILLISECONDS.
+     * @return this
      */
-    public void setEmptySleepTime(int emptySleepTime) {
+    public Spider setEmptySleepTime(long emptySleepTime) {
+        if(emptySleepTime<=0){
+            throw new IllegalArgumentException("emptySleepTime should be more than zero!");
+        }
         this.emptySleepTime = emptySleepTime;
+        return this;
     }
 }

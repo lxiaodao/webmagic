@@ -1,10 +1,15 @@
 package us.codecraft.webmagic.scripts;
 
-import org.apache.commons.io.IOUtils;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
+import org.apache.commons.io.IOUtils;
+
+import us.codecraft.webmagic.scripts.languages.Javascript;
+import us.codecraft.webmagic.scripts.languages.Language;
+
 
 /**
  * @author code4crafter@gmail.com
@@ -12,7 +17,7 @@ import java.io.InputStream;
  */
 public class ScriptProcessorBuilder {
 
-    private static final Language DefaultLanguage = Language.JavaScript;
+    private static final Language DefaultLanguage = new Javascript();
 
     private Language language = DefaultLanguage;
 
@@ -35,9 +40,8 @@ public class ScriptProcessorBuilder {
     public ScriptProcessorBuilder scriptFromFile(String fileName) {
         try {
             InputStream resourceAsStream = new FileInputStream(fileName);
-            this.script = IOUtils.toString(resourceAsStream);
+            this.script = IOUtils.toString(resourceAsStream, Charset.defaultCharset());
         } catch (IOException e) {
-            //wrap IOException because I prefer a runtime exception...
             throw new IllegalArgumentException(e);
         }
         return this;
@@ -46,9 +50,8 @@ public class ScriptProcessorBuilder {
     public ScriptProcessorBuilder scriptFromClassPathFile(String fileName) {
         try {
             InputStream resourceAsStream = ScriptProcessor.class.getClassLoader().getResourceAsStream(fileName);
-            this.script = IOUtils.toString(resourceAsStream);
+            this.script = IOUtils.toString(resourceAsStream, Charset.defaultCharset());
         } catch (IOException e) {
-            //wrap IOException because I prefer a runtime exception...
             throw new IllegalArgumentException(e);
         }
         return this;
